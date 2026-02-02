@@ -1,9 +1,6 @@
 import { useState, useRef, useCallback } from "react"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"
-import { httpsCallable } from "firebase/functions"
 import { v4 as uuidv4 } from "uuid"
-import { storage, db, functions } from "@/config/firebase"
+import { storage, db, functions, firebaseConfigured } from "@/config/firebase"
 import { useAuth } from "@/hooks/useAuth"
 import type { ConversionStatus, PollStatusResponse } from "@/types"
 
@@ -35,7 +32,9 @@ export function useVideoGeneration() {
 
   const pollStatus = useCallback(
     async (conversionId: string) => {
+      if (!functions) return
       try {
+        const { httpsCallable } = await import("firebase/functions")
         const pollVideoStatus = httpsCallable<{ conversionId: string }, PollStatusResponse>(
           functions,
           "pollVideoStatus"
@@ -80,6 +79,15 @@ export function useVideoGeneration() {
     async (file: File, promptText?: string) => {
       if (!user) return
 
+      if (!firebaseConfigured || !storage || !db || !functions) {
+        setState((prev) => ({
+          ...prev,
+          status: "failed",
+          error: "Firebase is not configured. Please set up Firebase credentials.",
+        }))
+        return
+      }
+
       setState({
         status: "uploading",
         progress: "Uploading photo...",
@@ -89,6 +97,10 @@ export function useVideoGeneration() {
       })
 
       try {
+        const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage")
+        const { collection, addDoc, serverTimestamp } = await import("firebase/firestore")
+        const { httpsCallable } = await import("firebase/functions")
+
         const fileId = uuidv4()
         const ext = file.name.split(".").pop()
         const storagePath = `users/${user.uid}/photos/${fileId}.${ext}`
